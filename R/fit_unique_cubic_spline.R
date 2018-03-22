@@ -81,7 +81,8 @@ dist <- function(param,t,y){
 #'
 #' @param t numeric vector of time values
 #' @param y numeric vector of observed values at time \code{t}
-#' @return the residual sum of squares between N_4(t,x_0,A,sigma) and y
+#' @return the optimal parameter values (timing \code{x_0},
+#' amplitude \code{A}, width of peak \code{sigma})
 #' @export
 spline_optim <- function(t,y){
   param_optim <- optim(par = c(8,1,1),fn = function(param){dist(param,t = t,y = y)})$par

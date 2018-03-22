@@ -12,7 +12,8 @@ spline_optim(t, y)
 \item{y}{numeric vector of observed values at time \code{t}}
 }
 \value{
-the residual sum of squares between N_4(t,x_0,A,sigma) and y
+the optimal parameter values (timing \code{x_0},
+amplitude \code{A}, width of peak \code{sigma})
 }
 \description{
 Function optimizing the timing, spread and amplitude of peak
