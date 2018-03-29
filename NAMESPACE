@@ -3,4 +3,5 @@
 export(N_4)
 export(N_4_unit)
 export(dist)
+export(sp2df)
 export(spline_optim)
