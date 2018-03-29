@@ -85,9 +85,15 @@ dist <- function(param,t,y){
 #' amplitude \code{A}, width of peak \code{sigma})
 #' @export
 spline_optim <- function(t,y){
-  param_optim <- optim(par = c(8,1,1),fn = function(param){dist(param,t = t,y = y)})$par
-  names(param_optim) <- c('x_0','A','sigma')
+
+  param_optim <-
+    optim(par = c(8*30,1,1*30),fn = function(param){dist(param,t = t,y = y)})$par
+
+  names(param_optim) <-
+    c('x_0','A','sigma')
+
   return(param_optim)
+
 }
 
 
