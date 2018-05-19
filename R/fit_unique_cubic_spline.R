@@ -68,7 +68,7 @@ N_4 <- function(x,x_0,A,sigma){
 #' @param y numeric vector of observed values at time \code{t}
 #' @return the residual sum of squares between N_4(t,x_0,A,sigma) and y
 #' @export
-dist <- function(param,t,y){
+dist_param <- function(param,t,y){
   x_0 <- param[1]
   A <- param[2]
   sigma <- param[3]
@@ -87,7 +87,7 @@ dist <- function(param,t,y){
 spline_optim <- function(t,y){
 
   param_optim <-
-    optim(par = c(8*30,1,1*30),fn = function(param){dist(param,t = t,y = y)})$par
+    optim(par = c(8*30,1,1*30),fn = function(param){dist_param(param,t = t,y = y)})$par
 
   names(param_optim) <-
     c('x_0','A','sigma')
