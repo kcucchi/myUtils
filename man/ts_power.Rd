@@ -8,9 +8,15 @@ ts_power(mat_wt, dates_seq, range_scale)
 }
 \arguments{
 \item{mat_wt}{matrix containing the wavelet transform}
+
+\item{dates_seq}{sequence of dates}
+
+\item{range_scale}{vector of length 2 specifying the range of scales}
 }
 \value{
-ggplot
+a dataframe with length(dates_seq)-1 rows,
+containing the mean power for each time period and
+and in the scale range defined in range_scale
 }
 \description{
 plot real part of the wavelet decomposition

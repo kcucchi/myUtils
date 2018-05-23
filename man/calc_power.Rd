@@ -4,10 +4,15 @@
 \alias{calc_power}
 \title{calculate wavelet power spectrum from mat_wt}
 \usage{
-calc_power(mat_wt)
+calc_power(mat_wt, normalize = T, J = 110)
 }
 \arguments{
 \item{mat_wt}{matrix containing the wavelet transform}
+
+\item{normalize}{boolean indicating whether
+to normalize each scale to unit energy}
+
+\item{J}{determines the largest scale s_J = s_0 2^(J dj)}
 }
 \value{
 the matrix of wavelet power spectrum
