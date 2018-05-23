@@ -87,6 +87,54 @@ wt_extract <- function(mat_wt,range_scale=NULL,range_date=NULL,fill=0){
 }
 
 
+# #'
+# #' Linear interpolation of wavelet coefficients in time
+# #' @param mat_wt matrix containing the wavelet transform
+# #' @param Nt integer specifying the increase in temporal resolution
+# #' @return wavelet transform matrix with increased temporal resolution
+# #' @export
+# wt_interp <- function(mat_wt,Nt=2){
+#
+#   # define original and new vector of time points
+#   t_orig <- 1:nrow(mat_wt)
+#   t_interp <- seq(from=1,to=nrow(mat_wt),by=1/Nt)
+#
+#   # define null results matrix
+#   res_wt <- matrix(data = NA,
+#                    nrow = length(t_interp), # increase the temporal resolution
+#                    ncol = ncol(mat_wt))
+#
+#   # loop over frequecies and interpolate wavelet coefficients
+#   for(icol in 1:ncol(res_wt)){
+#
+#     # need to do real and imaginary part separately
+#     res_wt[,icol] <-
+#       approx(x = t_orig,y = Re(mat_wt[,icol]),xout = t_interp)$y +
+#       1i * approx(x = t_orig,y = Im(mat_wt[,icol]),xout = t_interp)$y
+#
+#   }
+#
+#   # check one example
+#   #plot(x = t_orig,y = Re(mat_wt[,1]),type='l')
+#   #points(approx(x = t_orig,y = Re(mat_wt[,1]),xout = t_interp),col='red')
+#
+#   # if names in rows, assign new time points
+#   if(!is.null(rownames(mat_wt))){
+#     date_orig <- as.Date(rownames(mat_wt))
+#     rownames(res_wt) <-
+#       format(seq.Date(from=date_orig[1],
+#                       to=date_orig[length(date_orig)],
+#                       length.out = length(t_interp)))
+#   }
+#   if(!is.null(colnames(mat_wt))){
+#     colnames(res_wt) <- colnames(mat_wt)
+#   }
+#
+#   return(res_wt)
+#
+# }
+
+
 #'
 #' Reconstruct from wavelet transform
 #'@param mat_wt matrix containing the wavelet transform

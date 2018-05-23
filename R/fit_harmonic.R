@@ -74,3 +74,6 @@ fit_seasonal <- function(t_months,prop){
               df_components=df_components))
 
 }
+
+
+
