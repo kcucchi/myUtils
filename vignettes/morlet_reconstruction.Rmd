@@ -20,6 +20,9 @@ This vignette documents the use of the Morlet wavelet decomposition/recompositio
 
 The code was written based on the paper [Torrence and Campo, 1998](https://journals.ametsoc.org/doi/abs/10.1175/1520-0477%281998%29079%3C0061%3AAPGTWA%3E2.0.CO%3B2) and its implementation proposed in a Stack Overflow [post](http://www.r-https://stackoverflow.com/questions/22131080/wavelet-reconstruction-of-time-series).
 
+This vignette estimates time series of amplitudes and timings of periodicities of interest using wavelet decomposition and reconstruction.
+
+
 ```{r, fig.show='hold'}
 library(myUtils)
 ```
@@ -28,21 +31,21 @@ library(myUtils)
 
 ## Example periodic function
 
-First, let's first define an toy periodic function supporting following analyses.
+First, let's first define an toy periodic time series.
 
 ```{r, fig.show='hold'}
 # example of monthly time series with biyearly, yearly and biennial periodicities
 y <- 0.3*cos(2*pi/6*1:100) + # biyearly
-0.5*cos(pi/4+2*pi/12*1:100) + # yearly
-0.2*cos(pi/4+2*pi/24*1:100) # biennial
+  0.5*cos(pi/4+2*pi/12*1:100) + # yearly
+  0.2*cos(pi/4+2*pi/24*1:100) # biennial
 
 # add some noise
 y <- y + 0.1*rnorm(100) 
 
 # define corresponding time vector
 t <- seq.Date(from = as.Date('2000-01-01'),
-by = "1 month",
-length.out = length(y))
+              by = "1 month",
+              length.out = length(y))
 
 # visualize
 plot(x = t,y = y,type='l')
@@ -50,7 +53,7 @@ plot(x = t,y = y,type='l')
 
 ## Wavelet transform
 
-The wavelet transform (Equation 2 in [Torrence and Campo, 1998](https://journals.ametsoc.org/doi/abs/10.1175/1520-0477%281998%29079%3C0061%3AAPGTWA%3E2.0.CO%3B2)) is defined in the function `wt`. It outputs a matrix, where the rows correspond to time points and the columns correspond to periodicities. If the vector of time points `vect_time` and the time resolution `dt` are provided as arguments to the function, corresponding values of time and periodicities are assigned to column and row names of the output matrix.
+The wavelet transform (Equation 2 in [Torrence and Campo, 1998](https://journals.ametsoc.org/doi/abs/10.1175/1520-0477%281998%29079%3C0061%3AAPGTWA%3E2.0.CO%3B2)) is defined in the function `myUtils::wt`. It outputs a matrix, where the rows correspond to time points and the columns correspond to periodicities. If the vector of time points `vect_time` and the time resolution `dt` are provided as arguments to the function, corresponding values of time and periodicities are assigned to column and row names in the output matrix.
 
 ```{r, fig.show='hold'}
 mat_wt <- wt(y = y,vect_time = t,dt=1/12)
@@ -64,7 +67,7 @@ When `vect_time` and `dt` are provided as arguments to the function `wt`, `plot_
 ```{r, fig.show='hold'}
 library(ggplot2)
 print(plot_re(mat_wt) +
-                geom_hline(aes(yintercept=c(0.4,0.6,
+        geom_hline(aes(yintercept=c(0.4,0.6,
                                     0.8,1.2,
                                     1.7,2.3))) +
         scale_y_continuous(trans='log10',
@@ -175,15 +178,14 @@ ggplot(data = df_all,aes(x=t,y=y,col=periodicity)) +
 
 ```
 
-The reconstruction captures correctly that the main component in the data is .
+The reconstruction captures correctly that the main component in the data is the yearly component, then the biyearly and the biennal.
+
 
 # Extract power and phase time series
 
 The final goal of the study is to extract amplitudes and timings for specific periodicities and for different times in the study period.
 
 ## Extract time series of power
-
-
 
 ```{r}
 
@@ -231,7 +233,11 @@ ggplot(data = ts_all,
 
 Again, the power analysis correctly spotted that the strongest periodcity is the 1 year periodicity, followed by the 6 months periodity, and followed by the 2 year periodicity. 
 
-## Extract time series of phase
+The problem with averaging the power over a scale band is that the result is highly sensitive to the width of the band. Therefore, I prefer to extract the time series of amplitudes from the reconstructed time series.
+
+
+
+## Extract time series of maximum amplitude timings
 
 Second, extracting phases for a given periodicity consists in applying the `calc_phase` function on selected coefficients, and calculating the mean for each time point over scales within the specified periodicity range.
 
@@ -248,21 +254,53 @@ Then, in order to identify the timing of the maximum amplitude, the function `fi
 
 ```{r}
 # extract timings with phases 0
-t_0 <- find_zeros_lin(x = 1:length(t),f_x = phase_1y,bool_dec = F)
+t_max <- find_zeros_lin(x = 1:length(t),f_x = phase_1y,bool_dec = F)
+dates_max <- as.Date(approx(x = 1:length(t),
+                            y = as.Date(rownames(mat_wt)),
+                            xout = t_max)$y,
+                     origin = as.Date("1970-01-01"))
 
-plot(x = 1:length(t),y = phase_1y,type='l')
-points(x = t_0,
-       y = rep(0,length(t_0)),
+plot(x = as.Date(rownames(mat_wt)),y = phase_1y,
+     type='l',xlab='date',ylab='phase')
+points(x = dates_max,
+       y = rep(0,length(dates_max)),
        col = 'red')
 
 # check that they correspond to timings of maximum amplitudes
-plot(x = 1:length(t), y = rec_wt_1y,type='l')
-abline(v=t_0,col="red")
+plot(x = as.Date(rownames(mat_wt)), y = rec_wt_1y,
+     type='l',xlab='date',ylab='1 year reconstruction')
+abline(v=dates_max,col="red")
 
 ```
 
 
+## Extract time series of amplitudes
 
+Keep it simple : as a first approximation, extract maximum values around maximum timing
 
+```{r}
+
+val_max <- rep(NA,length(dates_max))
+
+for(i in 1:length(dates_max)){
+  
+  #vector of times
+  idx_change <- which( sign(t - dates_max[i]) == 1)[1]
+  
+  val_max[i] <- max(rec_wt_1y[idx_change-1],rec_wt_1y[idx_change])
+  
+}
+
+plot(x = as.Date(rownames(mat_wt)), y = rec_wt_1y,
+     type='l',xlab='date',ylab='1 year reconstruction')
+points(x=dates_max,y=val_max,col="red")
+
+```
+
+The amplitude can then be calculated by substracting the mean of `y` to `val_max` (in this example the mean is zero).
+
+# Conclusion
+
+This vignette shows how to use some code to extract time series of timing and amplitudes corresponding to specific periodicities of interest based on wavelet decomposition.
 
 
