@@ -1,0 +1,268 @@
+---
+title: "Morlet wavelet analysis"
+author: "Karina Cucchi"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Morlet wavelet reconstruction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+collapse = TRUE,
+comment = "#>"
+)
+```
+
+This vignette documents the use of the Morlet wavelet decomposition/recomposition functions from `myUtils` for future reference. I wrote functions for performing wavelet analysis based on the Morlet wavelet because I found no package that allowed to easily filter out unwanted scales and reconstruct timeseries corresponding to scales of interest only.
+
+The code was written based on the paper [Torrence and Campo, 1998](https://journals.ametsoc.org/doi/abs/10.1175/1520-0477%281998%29079%3C0061%3AAPGTWA%3E2.0.CO%3B2) and its implementation proposed in a Stack Overflow [post](http://www.r-https://stackoverflow.com/questions/22131080/wavelet-reconstruction-of-time-series).
+
+```{r, fig.show='hold'}
+library(myUtils)
+```
+
+# Wavelet decomposition
+
+## Example periodic function
+
+First, let's first define an toy periodic function supporting following analyses.
+
+```{r, fig.show='hold'}
+# example of monthly time series with biyearly, yearly and biennial periodicities
+y <- 0.3*cos(2*pi/6*1:100) + # biyearly
+0.5*cos(pi/4+2*pi/12*1:100) + # yearly
+0.2*cos(pi/4+2*pi/24*1:100) # biennial
+
+# add some noise
+y <- y + 0.1*rnorm(100) 
+
+# define corresponding time vector
+t <- seq.Date(from = as.Date('2000-01-01'),
+by = "1 month",
+length.out = length(y))
+
+# visualize
+plot(x = t,y = y,type='l')
+```
+
+## Wavelet transform
+
+The wavelet transform (Equation 2 in [Torrence and Campo, 1998](https://journals.ametsoc.org/doi/abs/10.1175/1520-0477%281998%29079%3C0061%3AAPGTWA%3E2.0.CO%3B2)) is defined in the function `wt`. It outputs a matrix, where the rows correspond to time points and the columns correspond to periodicities. If the vector of time points `vect_time` and the time resolution `dt` are provided as arguments to the function, corresponding values of time and periodicities are assigned to column and row names of the output matrix.
+
+```{r, fig.show='hold'}
+mat_wt <- wt(y = y,vect_time = t,dt=1/12)
+str(mat_wt)
+```
+
+In the output, each element corresponds to the wavelet coefficient for the time point `vect_time[i]`, and the scale s defined as `dt*2*2^(j*.125)`.
+
+When `vect_time` and `dt` are provided as arguments to the function `wt`, `plot_re` makes it easy to visualize the real part of the wavelet decomposition as a function of time and scale. 
+
+```{r, fig.show='hold'}
+library(ggplot2)
+print(plot_re(mat_wt) +
+                geom_hline(aes(yintercept=c(0.4,0.6,
+                                    0.8,1.2,
+                                    1.7,2.3))) +
+        scale_y_continuous(trans='log10',
+                           breaks = c(0.5,1,2),
+                           limits = c(2/12,3)))
+```
+
+Positive values (in red) indicate that the time series and the Morlet wavelet are in phase at the time and scale of interest, negative values (in blue) rather indicate that they are in phase opposition.
+
+Here, the wavelet decomposition correctly identifies the 3 main periodicities in the time series, as well as the corresponding strengths.
+
+## Visualize power spectrum
+
+```{r}
+df_pow <- mat_2_df(calc_power(mat_wt))
+head(df_pow)
+
+print(ggplot() +
+        geom_tile(data = df_pow,
+                  mapping = aes(x=date,y=period,fill=value)) +
+        geom_hline(aes(yintercept=c(0.4,0.6,
+                                    0.8,1.2,
+                                    1.7,2.3))) +
+        scale_y_continuous(trans='log10',
+                           breaks = c(0.5,1,2),
+                           limits = c(0.2,4)) +
+        scale_fill_distiller(palette = "Spectral") +
+        theme_bw() +
+        ggtitle('power spectrum'))
+
+```
+
+
+# Time series reconstruction
+
+## Reconstructing the original time series
+
+Before filtering out specific periodicities from the original time series, we first want to make sure that the time series reconstructed using all frequencies is equal to the original time series, so that the deconstruction reconstruction combine to the identity function.
+
+The inverse wavelet transform is defined in the function `wt_inverse`. `wt_inverse` provides the option to specify the mean of the original time series `y.m`: this mean value will be added to the output of the centered wavelet reconstruction.
+
+```{r, fig.show='hold'}
+rec_wt <- wt_inverse(mat_wt = mat_wt,y.m = mean(y))
+plot(x = t,y = rec_wt,type='l',ylab='y')
+lines(x = t,y = y,col='red',lty=2)
+legend('topright', legend=c("original", "reconstructed"),
+       col=c("black", "red"), lty=1:2)
+```
+
+
+The original time series (in black) and the reconstructed time series (in red) align perfectly.
+
+## Reconstruct 1 year periodicity
+
+For example, let's consider that we are interested in the studying the time series with a 1-year periodicity.
+
+The function `wt_extract` extracts wavelet coefficients within range of scales provided by `range_scale`. The output is a matrix with the same dimension as provided in the argument `mat_wt`, but where wavelet coefficients outside of the provided scale range are set to 0.
+
+Here, we extract coefficients in the period range from 0.8 to 1.2 years, which contains the 1-year periodicity signal according to the Figure showing wavelet coefficients.
+
+The one-year periodicity reconstruction is obtained by applying the inverse wavelet transform function to the matrix containing selected coefficients. 
+
+```{r}
+mat_wt_1y <-
+  wt_extract(mat_wt = mat_wt,
+             range_scale = c(0.8,1.2))
+rec_wt_1y <-
+  wt_inverse(mat_wt = mat_wt_1y,y.m = mean(y))
+
+# plot reconstructed time series
+plot(x = t,y = rec_wt,type='l',ylab='y')
+lines(x = t,y = y,col='red',lty=2)
+lines(x = t,y = rec_wt_1y,col='green')
+legend('topright', 
+       legend=c("original", "reconstructed","1 year"),
+       col=c("black", "red","green"),
+       lty=c(1,2,1))
+
+```
+
+## Reconstruct 3 periodicities
+
+```{r}
+rec_wt_6m <-
+  wt_inverse(mat_wt = wt_extract(mat_wt = mat_wt,
+                                 range_scale = c(0.4,0.6)),
+             y.m = mean(y))
+
+rec_wt_1y <-
+  wt_inverse(mat_wt = wt_extract(mat_wt = mat_wt,
+                                 range_scale = c(0.8,1.2)),
+             y.m = mean(y))
+
+rec_wt_2y <-
+  wt_inverse(mat_wt = wt_extract(mat_wt = mat_wt,
+                                 range_scale = c(1.7,2.3)),
+             y.m = mean(y))
+
+df_all <- 
+  rbind(data.frame(t=t,y=y,periodicity='original'),
+        data.frame(t=t,y=rec_wt_6m,periodicity='6m'),
+        data.frame(t=t,y=rec_wt_1y,periodicity='1y'),
+        data.frame(t=t,y=rec_wt_2y,periodicity='2y'))
+
+ggplot(data = df_all,aes(x=t,y=y,col=periodicity)) +
+  geom_line() +
+  theme_bw()
+
+```
+
+The reconstruction captures correctly that the main component in the data is .
+
+# Extract power and phase time series
+
+The final goal of the study is to extract amplitudes and timings for specific periodicities and for different times in the study period.
+
+## Extract time series of power
+
+
+
+```{r}
+
+date_start <- as.Date('2000-01-01')
+date_end <- as.Date('2008-01-01')
+
+# biyearly decomposition
+ts_pow_6m <-
+  ts_power(mat_wt = mat_wt,
+           dates_seq = seq.Date(from = date_start,
+                                to = date_end,
+                                by = "6 months"),
+           range_scale = c(0.4,0.6))
+
+# yearly decomposition
+ts_pow_1y <-
+  ts_power(mat_wt = mat_wt,
+           dates_seq = seq.Date(from = date_start,
+                                to = date_end,
+                                by = "1 year"),
+           range_scale = c(0.8,1.2))
+
+# biennial decomposition
+ts_pow_2y <-
+  ts_power(mat_wt = mat_wt,
+           dates_seq = seq.Date(from = date_start,
+                                to = date_end,
+                                by = "1 year"),
+           range_scale = c(1.5,3))
+
+# plot all in same figure
+ts_all <- 
+  rbind(data.frame(ts_pow_6m,periodicity="6m"),
+        data.frame(ts_pow_1y,periodicity="1y"),
+        data.frame(ts_pow_2y,periodicity="2y"))
+
+ggplot(data = ts_all,
+       mapping = aes(x = date_start,y=power,col=periodicity)) +
+  geom_line() +
+  geom_point() +
+  labs(y = "normalized power") +
+  theme_bw()
+
+```
+
+Again, the power analysis correctly spotted that the strongest periodcity is the 1 year periodicity, followed by the 6 months periodity, and followed by the 2 year periodicity. 
+
+## Extract time series of phase
+
+Second, extracting phases for a given periodicity consists in applying the `calc_phase` function on selected coefficients, and calculating the mean for each time point over scales within the specified periodicity range.
+
+```{r}
+phase_1y <-
+  rowMeans(x = calc_phase_angle(wt_extract(mat_wt = mat_wt,
+                                           range_scale = c(0.9,1.2),
+                                           fill = NA)),na.rm = T)
+
+plot(x = 1:length(t),y = phase_1y,type='l')
+```
+
+Then, in order to identify the timing of the maximum amplitude, the function `find_zeros_lin` can be applied in order to approximate time points when the phase angle is zero. The option `bool_dec=F` specifies to not look for zeros at times when the function is decreasing (these correspond to minima of in the reconstructed time series).
+
+```{r}
+# extract timings with phases 0
+t_0 <- find_zeros_lin(x = 1:length(t),f_x = phase_1y,bool_dec = F)
+
+plot(x = 1:length(t),y = phase_1y,type='l')
+points(x = t_0,
+       y = rep(0,length(t_0)),
+       col = 'red')
+
+# check that they correspond to timings of maximum amplitudes
+plot(x = 1:length(t), y = rec_wt_1y,type='l')
+abline(v=t_0,col="red")
+
+```
+
+
+
+
+
+

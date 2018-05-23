@@ -30,34 +30,60 @@ mo<-function(t,t_0=0,omega=6,j=0){
 #'@return the wavelet transform
 #'@export
 wt <- function(y,J=110,vect_time=NULL,dt=1){
+
   mat_res <- matrix(data = NA,nrow = length(y),ncol=(J+1))
+
   y.madj <- y - mean(y)
+
   for(j in 0:J){
     for(k in 1:length(y.madj)){
-      mat_res[k,j+1]<-mo(t=1:(length(y.madj)),j=j,t_0=k)%*%y.madj
+      mat_res[k,j+1]<-Conj(mo(t=1:(length(y.madj)),j=j,t_0=k))%*%y.madj
     }
   }
+
   # name the dimensions
   # rows are time points
   rownames(mat_res) <- format(vect_time)
   # columns are frequencies
   colnames(mat_res) <- dt*2*2^(0:J*.125)
   return(mat_res)
+
 }
 
 #'
 #'Extract components between 2 scales
 #'@param mat_wt matrix containing the wavelet transform
-#'@param range_scale vector of length 2 containing scales to extract
+#'@param range_scale vector of length 2 specifying the range of scales
+#'@param range_date vector of 2 dates specifying the range of dates
 #'@param fill variable to fill matrix outside of scale range
 #'@return wt matrix with scales in range_scale and zero otherwise
 #'@export
-extract_scales <- function(mat_wt,range_scale,fill=0){
+wt_extract <- function(mat_wt,range_scale=NULL,range_date=NULL,fill=0){
+
+  # define null results matrix
   res_wt <- matrix(data = fill,nrow = nrow(mat_wt),ncol = ncol(mat_wt))
-  idx_cols <- as.numeric(colnames(mat_wt)) >= min(range_scale) &
-    as.numeric(colnames(mat_wt)) <= max(range_scale)
-  res_wt[,idx_cols] <- mat_wt[,idx_cols]
+
+  # define range of dates
+  if(!is.null(range_date)){
+    idx_rows <- as.Date(rownames(mat_wt)) >= min(range_date) &
+      as.Date(rownames(mat_wt)) <= max(range_date)
+  }else{idx_rows <- 1:nrow(res_wt)}
+
+  # define range of scales
+  if(!is.null(range_scale)){
+    idx_cols <- as.numeric(colnames(mat_wt)) >= min(range_scale) &
+      as.numeric(colnames(mat_wt)) <= max(range_scale)
+  }else{idx_cols <- 1:ncol(res_wt)}
+
+  # replace corresponding rows and columns in results matrix
+  res_wt[idx_rows,idx_cols] <- mat_wt[idx_rows,idx_cols]
+
+  # assign names to rows and columns
+  rownames(res_wt) <- rownames(mat_wt)
+  colnames(res_wt) <- colnames(mat_wt)
+
   return(res_wt)
+
 }
 
 
@@ -71,9 +97,9 @@ extract_scales <- function(mat_wt,range_scale,fill=0){
 wt_inverse <- function(mat_wt,y.m=0,J=110){
 
   dial<-2*2^(0:J*.125)
-  rec<-rep(NA,(length(y.madj)))
-  for(l in 1:(length(y.madj))){
-    rec[l]<-0.2144548*sum(mat_wt[l,]/sqrt(dial))
+  rec<-rep(NA,(nrow(mat_wt)))
+  for(l in 1:(nrow(mat_wt))){
+    rec[l]<-0.2144548*sum(Re(mat_wt[l,])/sqrt(dial))
   }
 
   return(rec + y.m)
@@ -81,13 +107,35 @@ wt_inverse <- function(mat_wt,y.m=0,J=110){
 }
 
 #'
-#' extract phase from mat_wt
+#'calculate phase from mat_wt
 #'@param mat_wt matrix containing the wavelet transform
 #'@return the time series of phase angles
 #'@export
-phase_angle <- function(mat_wt){
+calc_phase_angle <- function(mat_wt){
 
   return(atan2(y = Im(mat_wt),x = Re(mat_wt)))
+
+}
+
+#'
+#'calculate wavelet power spectrum from mat_wt
+#'@param mat_wt matrix containing the wavelet transform
+#'@param normalize boolean indicating whether
+#'to normalize each scale to unit energy
+#'@param J determines the largest scale s_J = s_0 2^(J dj)
+#'@return the matrix of wavelet power spectrum
+#'@export
+calc_power <- function(mat_wt,normalize=T,J=110){
+
+  mat_pow <- Mod(mat_wt)^2
+
+  if(normalize){
+    dial = 1 / (2*2^(0:J*.125)) # Eq.8 in document
+    mat_norm <- matrix(data = rep(dial,nrow(mat_wt)),ncol=J+1,byrow = T)
+    mat_pow <- mat_pow * mat_norm
+  }
+
+  return(mat_pow)
 
 }
 
@@ -120,24 +168,70 @@ find_zeros_lin <- function(x,f_x,bool_inc=T,bool_dec=T){
 
 }
 
+#'
+#'small function to format the matrix into a dataframe
+#'@param mat_wt matrix containing the wavelet transform
+#'@return the dataframe in a long format
+#'@export
+mat_2_df <- function(mat_wt){
+
+  df_wt <- as.data.frame(mat_wt)
+  df_wt$date <- rownames(mat_wt)
+  df_wt_long <- tidyr::gather(data = df_wt,
+                              key=period,value=value,-date)
+
+  df_wt_long$period <- as.numeric(df_wt_long$period)
+  df_wt_long$date <- as.Date(df_wt_long$date)
+
+  return(df_wt_long)
+
+}
+
+#'plot real part of the wavelet decomposition
+#'@param mat_wt matrix containing the wavelet transform
+#'@param dates_seq sequence of dates
+#'@param range_scale vector of length 2 specifying the range of scales
+#'@return a dataframe with length(dates_seq)-1 rows,
+#'containing the mean power for each time period and
+#'and in the scale range defined in range_scale
+#'@export
+ts_power <- function(mat_wt,dates_seq,range_scale){
+
+  # extract scales of interest and transform to long format
+  df_wt <-
+    mat_2_df(mat_wt = wt_extract(mat_wt = calc_power(mat_wt),
+                                 range_scale = range_scale,
+                                 fill = NA))
+  n <- length(dates_seq) - 1
+
+  df_res <- data.frame(date_start = dates_seq[1:n],
+                       date_end = dates_seq[2:(n+1)],
+                       power = NA)
+
+  for(i in 1:n){
+
+    df_wt_i <- subset(x = df_wt,
+                      subset = date >= df_res[i,'date_start'] &
+                        date <= df_res[i,'date_end'])
+
+    df_res[i,'power'] <- mean(df_wt_i$value,na.rm = T)
+
+  }
+
+  return(df_res)
+
+}
+
+
 #'plot real part of the wavelet decomposition
 #'@param mat_wt matrix containing the wavelet transform
 #'@return ggplot
 #'@export
 plot_re <- function(mat_wt){
 
-  wt.r <- Re(mat_wt)
-
   # check plot
-  df_wt <- as.data.frame(wt.r)
-  df_wt$date <- rownames(wt.r)
-  df_wt_long <- tidyr::gather(data = df_wt,
-                              key=period,value=value,-date)
+  df_wt_long <- mat_2_df(Re(mat_wt))
 
-  # str(df_wt_long)
-
-  df_wt_long$period <- as.numeric(df_wt_long$period)
-  df_wt_long$date <- as.Date(df_wt_long$date)
 
   g_res <-
     ggplot() +
@@ -164,7 +258,7 @@ plot_re <- function(mat_wt){
 # mat_wt <- wt(y = y,vect_time = t,dt=1/12)
 # str(mat_wt)
 #
-# rec_wt <- wt_inverse(mat_wt = mat_wt,dt=1/12,y.m = mean(y))
+# rec_wt <- wt_inverse(mat_wt = mat_wt,y.m = mean(y))
 # plot(x = t,y = rec_wt,type='l')
 # lines(x = t,y = y,col='red')
 #
