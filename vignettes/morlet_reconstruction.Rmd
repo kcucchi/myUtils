@@ -301,6 +301,6 @@ The amplitude can then be calculated by substracting the mean of `y` to `val_max
 
 # Conclusion
 
-This vignette shows how to use some code to extract time series of timing and amplitudes corresponding to specific periodicities of interest based on wavelet decomposition.
+This vignette shows how to extract time series of timing and amplitudes corresponding to specific periodicities of interest based on wavelet decomposition.
 
 
